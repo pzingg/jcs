@@ -3,6 +3,14 @@
 A pure Elixir implementation of 
 [RFC 8785: JSON Canonicalization Scheme (JCS)](https://www.rfc-editor.org/rfc/rfc8785).
 
+JCS can be used to establish a canonical deterministic representation of linked JSON data.
+These represenations can then be used in establishing identity proofs. 
+
+For an example, see the [W3C Data Integrity 1.0 report](https://www.w3.org/community/reports/credentials/CG-FINAL-data-integrity-20220722/#proofs).
+
+That report also gives as an example usage identity proofs, the ability to 
+authenticate as an entity identified by a [Decentralized Identifier (DID)](https://www.w3.org/TR/did-core/).
+
 The JSON encoding here is absolutely guaranteed to be orders of magnitude 
 slower than the Jason library. There is no attempt here to decent better memory
 management in building the output, and sorting object properties based on their
