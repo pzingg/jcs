@@ -37,9 +37,12 @@ end
 
 ## Usage
 
-
+```elixir
+Jcs.encode(%{"aa" => 200, "b" => 100.0, "西葛西駅" => [200, "station"], "a" => "hello\tworld!"})
+  
+"{\"a\":\"hello\\tworld!\",\"aa\":200,\"b\":100,\"西葛西駅\":[200,\"station\"]}"
+```
 
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
 and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
 be found at <https://hexdocs.pm/jcs>.
-
