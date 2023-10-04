@@ -4,7 +4,8 @@ defmodule Jcs do
 
   Based on Python 3 implementation at https://github.com/titusz/jcs
 
-  Requires Erlang OTP 25 (Ryu `float_to_binary(number, [:short])` support).
+  Requires Erlang OTP 25 (Ryu `float_to_binary(number, [:short])` support), and
+  therefore Elixir 1.14.
   """
 
   import Bitwise
@@ -49,11 +50,17 @@ defmodule Jcs do
   }
 
   @doc """
-  Puts this JSON object in canonical form according to
+  Encodes data into a JSON string, in a canonical form according to
   [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785#name-generation-of-canonical-jso).
 
-  This will canonicalize map entries and sort them by key.
+  Canonicalizes nested map entries and sorts them by their keys.
   Entries with the same key are sorted by value.
+
+  Numbers are encoded to produce the shortest exact values possible.
+
+  The ordering for the key and value sorting is determined by converting
+  each key and value into UTF-16, while the actual resultant JSON string is
+  encoded in UTF-8.
   """
   def encode(data) do
     otp = System.otp_release()
@@ -67,7 +74,9 @@ defmodule Jcs do
   end
 
   @doc """
-  Return a JSON representation of a string
+  Returns a JSON representation of a string, escaping characters
+  between ASCII values 0x00 and 0x1F per RFC 8785. Characters with
+  values above 0x1F are encoded verbatim.
   """
   def encode_basestring(s) do
     Regex.replace(@escape, s, fn match ->
@@ -76,7 +85,10 @@ defmodule Jcs do
   end
 
   @doc """
-  Return an ASCII-only JSON representation of a string
+  Returns an ASCII-only JSON representation of a string, escaping characters
+  between ASCII values 0x00 and 0x1F per RFC 8785. Characters with
+  values above 0x1F are encoded as one or two 16-bit "\\uxxxx"
+  strings.
   """
   def encode_basestring_ascii(s) do
     String.codepoints(s)
@@ -92,8 +104,8 @@ defmodule Jcs do
 
   @doc """
   Given either a single codepoint (unicode character), or its
-  integer value, returns a single string of one or two "\\uxxxx" elements,
-  each representing a UTF-16 encoded value.
+  integer value, returns a single string concatenating one or
+  two "\\uxxxx" elements, each representing a UTF-16 encoded value.
   """
   def encode_utf16(cp) when is_binary(cp) do
     cp
@@ -146,7 +158,7 @@ defmodule Jcs do
     end
   end
 
-  def hex4(n) do
+  defp hex4(n) do
     Integer.to_string(n, 16)
     |> String.downcase()
     |> String.pad_leading(4, "0")
