@@ -33,4 +33,24 @@ defmodule JcsFixturesTest do
   test "weird.json" do
     fixture_test("weird.json")
   end
+
+  test "tjs09.json" do
+    fixture_test("tjs09.json")
+  end
+
+  test "tjs10.json" do
+    fixture_test("tjs10.json")
+  end
+
+  test "tjs11.json" do
+    fixture_test("tjs11.json")
+  end
+
+  test "tjs12.json" do
+    fixture_test("tjs12.json")
+  end
+
+  test "tjs13.json" do
+    fixture_test("tjs13.json")
+  end
 end

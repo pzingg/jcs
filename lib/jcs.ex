@@ -89,6 +89,16 @@ defmodule Jcs do
   between ASCII values 0x00 and 0x1F per RFC 8785. Characters with
   values above 0x1F are encoded as one or two 16-bit "\\uxxxx"
   strings.
+
+  If the Unicode value falls within the traditional ASCII control character
+  range (U+0000 through U+001F), it MUST be serialized using lowercase
+  hexadecimal Unicode notation (\\uhhhh) unless it is in the set of predefined
+  JSON control characters U+0008, U+0009, U+000A, U+000C, or U+000D, which
+  MUST be serialized as \b, \t, \n, \f, and \r, respectively.
+
+  If the Unicode value is outside of the ASCII control character range, it
+  MUST be serialized "as is" unless it is equivalent to U+005C (\) or
+  U+0022 ("), which MUST be serialized as \\ and \", respectively.
   """
   def encode_basestring_ascii(s) do
     String.codepoints(s)
