@@ -24,13 +24,20 @@ defmodule Jcs do
   [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785#name-generation-of-canonical-jso).
 
   Canonicalizes nested map entries and sorts them by their keys.
+
   Entries with the same key are sorted by value.
 
-  Numbers are encoded to produce the shortest exact values possible.
+  Numbers are encoded to produce the shortest exact values possible,
+  using the Erlang function `:erlang.float_to_binary/2`, which seems
+  to have differing results depending on the OTP release. Steps
+  from [ECMA-262 - Abstract Operations - 7.1.12.1 - NumberToString](https://262.ecma-international.org/10.0/index.html#sec-abstract-operations)
+  are applied to the results of the conversion to produce the final
+  encoding.
 
   The ordering for the key and value sorting is determined by converting
   each key and value into UTF-16, while the actual resultant JSON string is
-  encoded in UTF-8.
+  encoded in UTF-8, according to the particular rules in
+  [RFC 8785 - 3.2.2.2 - Serialization of Strings](https://www.rfc-editor.org/rfc/rfc8785#name-serialization-of-strings).
   """
   def encode(data) do
     otp = System.otp_release()
@@ -82,13 +89,20 @@ defmodule Jcs do
 
   If the Unicode value falls within the traditional ASCII control character
   range (U+0000 through U+001F), it MUST be serialized using lowercase
-  hexadecimal Unicode notation (\\uhhhh) unless it is in the set of predefined
+  hexadecimal Unicode notation ("\\uhhhh") unless it is in the set of predefined
   JSON control characters U+0008, U+0009, U+000A, U+000C, or U+000D, which
-  MUST be serialized as \b, \t, \n, \f, and \r, respectively.
+  MUST be serialized as "\b", "\t", "\n", "\f", and "\r", respectively.
 
   If the Unicode value is outside of the ASCII control character range, it
   MUST be serialized "as is" unless it is equivalent to U+005C (\) or
-  U+0022 ("), which MUST be serialized as \\ and \", respectively.
+  U+0022 ("), which MUST be serialized as "\\" and "\"", respectively.
+
+  Implementation note: For Elixir, we assume that "as is" means that
+  single-byte codepoints for non-printing characters in the range
+  U+0080 to U+00A0 should also be serialized in the lowercase
+  hexadecimal Unicode notation ("\\uhhhh"). Without this special
+  serialization, Elixir will serialize these characters with an
+  8-bit notation: "\\xhh".
   """
   def encode_basestring_ascii(s) do
     String.codepoints(s)
@@ -239,6 +253,10 @@ defmodule Jcs do
     end
   end
 
+  # OTP-independent number serialization.
+  #
+  # Algorithm from [ECMA-262 - Abstract Operations - 7.1.12.1 - NumberToString](https://262.ecma-international.org/10.0/index.html#sec-abstract-operations)
+  #
   # The abstract operation NumberToString converts a Number m to String
   # format as follows:
   #
