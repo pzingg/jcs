@@ -1,9 +1,11 @@
 {
   "€": "Euro Sign",
+  "\r": "Carriage Return",
+  "\u000a": "Newline",
   "1": "One",
-  "\u0080": "Control",
+  "\u0080": "Control\u007f",
   "\ud83d\ude02": "Smiley",
-  "ö": "Latin Small Letter O With Diaeresis",
-  "דּ": "Hebrew Letter Dalet With Dagesh",
+  "\u00f6": "Latin Small Letter O With Diaeresis",
+  "\ufb33": "Hebrew Letter Dalet With Dagesh",
   "</script>": "Browser Challenge"
 }

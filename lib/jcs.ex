@@ -10,43 +10,13 @@ defmodule Jcs do
 
   import Bitwise
 
-  @escape ~r/[\\"\x00-x\1f]/
   @escape_ascii ~r/([\\"]|[^\\ -~])/
-  @escape_dct %{
-    "\\" => "\\\\",
-    "\"" => "\\\"",
-    "\x00" => "\\u0000",
-    "\x01" => "\\u0001",
-    "\x02" => "\\u0002",
-    "\x03" => "\\u0003",
-    "\x04" => "\\u0004",
-    "\x05" => "\\u0005",
-    "\x06" => "\\u0006",
-    "\x07" => "\\u0007",
-    "\x08" => "\\b",
-    "\x09" => "\\t",
-    "\x0a" => "\\n",
-    "\x0b" => "\\u000b",
-    "\x0c" => "\\f",
-    "\x0d" => "\\r",
-    "\x0e" => "\\u000e",
-    "\x0f" => "\\u000f",
-    "\x10" => "\\u0010",
-    "\x11" => "\\u0011",
-    "\x12" => "\\u0012",
-    "\x13" => "\\u0013",
-    "\x14" => "\\u0014",
-    "\x15" => "\\u0015",
-    "\x16" => "\\u0016",
-    "\x17" => "\\u0017",
-    "\x18" => "\\u0018",
-    "\x19" => "\\u0019",
-    "\x1a" => "\\u001a",
-    "\x1b" => "\\u001b",
-    "\x1c" => "\\u001c",
-    "\x1d" => "\\u001d",
-    "\x1e" => "\\u001e",
-    "\x1f" => "\\u001f"
+  @specials %{
+    0x08 => "\\b",
+    0x09 => "\\t",
+    0x0A => "\\n",
+    0x0C => "\\f",
+    0x0D => "\\r"
   }
 
   @doc """
@@ -79,9 +49,29 @@ defmodule Jcs do
   values above 0x1F are encoded verbatim.
   """
   def encode_basestring(s) do
-    Regex.replace(@escape, s, fn match ->
-      Map.get(@escape_dct, match, match)
+    String.to_charlist(s)
+    |> Enum.map(fn cp ->
+      cond do
+        cp == 0x22 ->
+          "\\\""
+
+        cp == 0x5C ->
+          "\\\\"
+
+        cp < 0x20 || (cp >= 0x80 && cp < 0xA1) ->
+          case Map.get(@specials, cp) do
+            nil ->
+              "\\u" <> hex4(cp)
+
+            special ->
+              special
+          end
+
+        true ->
+          to_string([cp])
+      end
     end)
+    |> Enum.join("")
   end
 
   @doc """
@@ -187,19 +177,20 @@ defmodule Jcs do
   end
 
   defp canonicalize(data, output) when is_float(data) do
-    case coerced_to_integer(data) do
-      {:integer, i} ->
-        canonicalize(i, output)
+    s =
+      if data < 0 do
+        case number_to_string(-data) do
+          "0" -> "0"
+          s -> "-" <> s
+        end
+      else
+        case number_to_string(data) do
+          "-0" -> "0"
+          s -> s
+        end
+      end
 
-      :float ->
-        # Use Erlang Ryu implementation
-        s = :erlang.float_to_binary(data, [:short])
-
-        # Truncate and expand Erlang Ryu "1.0e23" to "1e+23"
-        s = Regex.replace(~r/\.0e/, s, "e")
-        s = Regex.replace(~r/e(\d)/, s, "e+\\1")
-        output ++ [s]
-    end
+    output ++ [s]
   end
 
   defp canonicalize(data, output) when is_integer(data) do
@@ -221,10 +212,10 @@ defmodule Jcs do
   defp canonicalize(data, output) when is_map(data) do
     dict =
       Map.to_list(data)
+      |> Enum.sort(&sort_properties/2)
       |> Enum.map(fn {key, value} ->
         {canonicalize_key(key), canonicalize(value, [])}
       end)
-      |> Enum.sort(&sort_properties/2)
       |> Enum.map(fn {key, value} -> ["\"", key, "\":", value] end)
       |> Enum.join(",")
 
@@ -248,15 +239,129 @@ defmodule Jcs do
     end
   end
 
-  defp coerced_to_integer(data) when is_float(data) do
-    # Converts integral floats in range -9007199254740992 to 9007199254740992
-    # to integers.
-    i = round(data)
+  # The abstract operation NumberToString converts a Number m to String
+  # format as follows:
+  #
+  # 1. If m is NaN, return the String "NaN".
+  # 2. If m is +0 or -0, return the String "0".
+  # 3. If m is less than zero, return the string-concatenation of "-" and
+  #    NumberToString(-m).
+  # 4. If m is +∞, return the String "Infinity".
+  # 5. Otherwise, let n, k, and s be integers such that k ≥ 1,
+  #    10^(k - 1) ≤ s < 10^k, the Number value for s × 10^(n - k) is m,
+  #    and k is as small as possible. Note that k is the number of digits in
+  #    the decimal representation of s, that s is not divisible by 10,
+  #    and that the least significant digit of s is not necessarily
+  #    uniquely determined by these criteria.
+  # 6. If k ≤ n ≤ 21, return the string-concatenation of:
+  #    a. the code units of the k digits of the decimal representation of s
+  #      (in order, with no leading zeroes)
+  #    b. n - k occurrences of the code unit 0x0030 (DIGIT ZERO)
+  # 7. If 0 < n ≤ 21, return the string-concatenation of:
+  #    a. the code units of the most significant n digits of the decimal
+  #      representation of s
+  #    b. the code unit 0x002E (FULL STOP)
+  #    c. the code units of the remaining k - n digits of the decimal
+  #      representation of s
+  # 8. If -6 < n ≤ 0, return the string-concatenation of:
+  #    a. the code unit 0x0030 (DIGIT ZERO)
+  #    b. the code unit 0x002E (FULL STOP)
+  #    c. -n occurrences of the code unit 0x0030 (DIGIT ZERO)
+  #    d. the code units of the k digits of the decimal representation of s
+  # 9. Otherwise, if k = 1, return the string-concatenation of:
+  #    a. the code unit of the single digit of s
+  #    b. the code unit 0x0065 (LATIN SMALL LETTER E)
+  #    c. the code unit 0x002B (PLUS SIGN) or the code unit 0x002D
+  #      (HYPHEN-MINUS) according to whether n - 1 is positive or negative
+  #    d. the code units of the decimal representation of the integer
+  #      abs(n - 1) (with no leading zeroes)
+  # 10. Return the string-concatenation of:
+  #    a. the code units of the most significant digit of the decimal
+  #      representation of s
+  #    b. the code unit 0x002E (FULL STOP)
+  #    c. the code units of the remaining k - 1 digits of the decimal
+  #      representation of s
+  #    d. the code unit 0x0065 (LATIN SMALL LETTER E)
+  #    e. the code unit 0x002B (PLUS SIGN) or the code unit 0x002D
+  #      (HYPHEN-MINUS) according to whether n - 1 is positive or negative
+  #    f. the code units of the decimal representation of the integer
+  #      abs(n - 1) (with no leading zeroes)
+  #
+  # Note 1
+  #
+  # The following observations may be useful as guidelines for
+  # implementations, but are not part of the normative requirements of this
+  # Standard:
+  #
+  # If x is any Number value other than -0, then ToNumber(ToString(x)) is
+  #   exactly the same Number value as x.
+  # The least significant digit of s is not always uniquely determined by
+  #   the requirements listed in step 5.
+  #
+  # Note 2
+  #
+  # For implementations that provide more accurate conversions than
+  # required by the rules above, it is recommended that the following
+  # alternative version of step 5 be used as a guideline:
+  #
+  # Otherwise, let n, k, and s be integers such that k ≥ 1,
+  #   10^(k - 1) ≤ s < 10^k, the Number value for s × 10^(n - k) is m,
+  #   and k is as small as possible. If there are multiple possibilities
+  #   for s, choose the value of s for which s × 10^(n - k) is closest
+  #   in value to m. If there are two such possible values of s,
+  #   choose the one that is even. Note that k is the number of digits
+  #   in the decimal representation of s and that s is not divisible by 10.
+  defp number_to_string(number) do
+    # Use Erlang Ryu implementation
+    s = :erlang.float_to_binary(number, [:short])
 
-    if i >= -9_007_199_254_740_992 && i <= 9_007_199_254_740_992 && i + 0.0 == data do
-      {:integer, i}
+    s =
+      case Regex.run(~r/^(\d)[.](.+)e([-]?)(\d+)$/, s) do
+        nil ->
+          s
+
+        [_, x, decimals, "-", k] ->
+          k = String.to_integer(k)
+
+          decimals =
+            if decimals == "0" do
+              x
+            else
+              x <> decimals
+            end
+
+          # "1.0e-6" -> "0.000001"
+          # k = 6
+          # decimals = "1"
+          # String.duplicate = "00000"
+          if k >= 0 && k <= 6 do
+            "0." <> String.duplicate("0", k - 1) <> decimals
+          else
+            s
+          end
+
+        [_, x, decimals, _, k] ->
+          k = String.to_integer(k) + 1
+          decimals = x <> decimals
+
+          if k >= 0 && k <= 21 do
+            # "9.999999999999997e20" -> "999999999999999700000"
+            # k = 21
+            # decimals = "9999999999999997"
+            String.pad_trailing(decimals, k, "0")
+          else
+            s
+          end
+      end
+
+    if String.contains?(s, "e") do
+      # Change "<N>.0e21" to "<N>e21"
+      s = Regex.replace(~r/\.0e/, s, "e")
+      # Change "<MANTISSA>e21" to "<MANTISSA>e+21"
+      Regex.replace(~r/e(\d)/, s, "e+\\1")
     else
-      :float
+      # Change "<NUMBER>.0" to "<NUMBER>" (integer)
+      String.replace_trailing(s, ".0", "")
     end
   end
 

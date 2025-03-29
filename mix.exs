@@ -1,7 +1,7 @@
 defmodule Jcs.MixProject do
   use Mix.Project
 
-  @version "0.1.1"
+  @version "0.2.0"
   @github_project_url "https://github.com/pzingg/jcs"
 
   def project do
@@ -106,7 +106,8 @@ defmodule Jcs.MixProject do
   defp deps do
     [
       {:jason, "~> 1.4"},
-      {:ex_doc, "~> 0.30", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.30", only: :dev, runtime: false},
+      {:ex_unit_parameterize, "~> 0.1.0-alpha.4", only: :test}
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
     ]

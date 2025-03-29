@@ -21,8 +21,11 @@ Pull requests are gratefully encouraged!
 
 Code is based on the [Python 3 jcs package](https://github.com/titusz/jcs).
 
-Test suites are from the [Java implementation by Samuel Erdtman](https://github.com/erdtman/java-json-canonicalization) 
-and from [Appendix B of RFC 8785](https://www.rfc-editor.org/rfc/rfc8785#section-appendix.b).
+Test suites are from:
+  * [JSON-LD 1.1 Processing Algorithms and API - Test Suite](https://w3c.github.io/json-ld-api/tests/)
+  * [cyberphone/json-canonicalization - On-line Browser Test](https://cyberphone.github.io/doc/security/browser-json-canonicalization.html)
+  * [Java implementation by Samuel Erdtman](https://github.com/erdtman/java-json-canonicalization)
+  * [RFC 8785 - Appendix B. Number Serialization Samples](https://www.rfc-editor.org/rfc/rfc8785#name-number-serialization-sample).
 
 ## Installation
 
@@ -32,7 +35,7 @@ by adding `jcs` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:jcs, "~> 0.1.1"}
+    {:jcs, "~> 0.2.0"}
   ]
 end
 ```
