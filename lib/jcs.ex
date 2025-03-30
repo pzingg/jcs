@@ -22,9 +22,9 @@ defmodule Jcs do
   Encodes data into a JSON string, in a canonical form according to
   [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785#name-generation-of-canonical-jso).
 
-  Canonicalizes nested map entries and sorts them by their keys.
+  Canonicalizes nested object entries and sorts them by their names.
 
-  Entries with the same key are sorted by value.
+  Entries with the same name are sorted by value.
 
   Numbers are encoded to produce the shortest exact values possible,
   using the Erlang function `:erlang.float_to_binary/2`, which seems
@@ -33,8 +33,8 @@ defmodule Jcs do
   are applied to the results of the conversion to produce the final
   encoding.
 
-  The ordering for the key and value sorting is determined by converting
-  each key and value into UTF-16, while the actual resultant JSON string is
+  The ordering for the name and value sorting is determined by converting
+  each name and value into UTF-16, while the actual resultant JSON string is
   encoded in UTF-8, according to the particular rules in
   [RFC 8785 - 3.2.2.2 - Serialization of Strings](https://www.rfc-editor.org/rfc/rfc8785#name-serialization-of-strings).
   """
@@ -155,7 +155,7 @@ defmodule Jcs do
   Given either a binary, a list of codepoints,
   a single codepoint (unicode character) or its integer value,
   returns a flattened list of UTF-16 encoded values. This list
-  can be used to sort object property keys as specified in the RFC.
+  can be used to sort object names as specified in the RFC.
   """
   def to_utf16(n) when is_integer(n) do
     if n < 0x10000 do
@@ -240,11 +240,12 @@ defmodule Jcs do
   defp canonicalize(data, output) when is_map(data) do
     dict =
       Map.to_list(data)
+      |> Enum.map(&stringify_name/1)
       |> Enum.sort(&sort_properties/2)
-      |> Enum.map(fn {key, value} ->
-        {canonicalize_key(key), canonicalize(value, [])}
+      |> Enum.map(fn {name, value} ->
+        {encode_basestring(name), canonicalize(value, [])}
       end)
-      |> Enum.map(fn {key, value} -> ["\"", key, "\":", value] end)
+      |> Enum.map(fn {name, value} -> ["\"", name, "\":", value] end)
       |> Enum.join(",")
 
     output ++ ["{", dict, "}"]
@@ -254,23 +255,21 @@ defmodule Jcs do
     raise ArgumentError, "unhandled data #{inspect(data)}"
   end
 
-  defp canonicalize_key(key) when is_binary(key), do: encode_basestring(key)
+  defp stringify_name({name, _v} = elem) when is_binary(name), do: elem
 
-  defp canonicalize_key(bad_key) do
-    # Not sure if this is a safe idea. Alternative would be just
-    # to raise an ArgumentError.
+  defp stringify_name({name, value}) when is_atom(name) and not is_nil(name) do
     try do
-      to_string(bad_key) |> canonicalize_key()
+      {to_string(name), value}
     rescue
       _ ->
-        raise ArgumentError, "bad key #{inspect(bad_key)}"
+        raise ArgumentError, "Invalid JSON object name #{inspect(name)}"
     end
   end
 
-  defp sort_properties({k1, _v1}, {k2, _v2}) when is_binary(k1) and is_binary(k2) do
-    # Sort object properties by key name as UTF-16 encoded.
-    utf1 = to_utf16(k1)
-    utf2 = to_utf16(k2)
+  defp sort_properties({name1, _value1}, {name2, _value2}) do
+    # Sort object properties by name as UTF-16 encoded.
+    utf1 = to_utf16(name1)
+    utf2 = to_utf16(name2)
     utf1 <= utf2
   end
 

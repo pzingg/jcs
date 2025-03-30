@@ -134,9 +134,37 @@ defmodule JcsTest do
         })
 
       encoded_2 =
-        Jcs.encode(%{"aa" => 200, "b" => 100, "西葛西駅" => [200, "station"], "a" => "hello\tworld!"})
+        Jcs.encode(%{
+          "aa" => 200,
+          "b" => 100,
+          "西葛西駅" => [200, "station"],
+          "a" => "hello\tworld!"
+        })
 
       assert encoded_1 == encoded_2
+    end
+
+    test "map with atom keys" do
+      encoded = Jcs.encode(%{b: 2, a: 1})
+      assert encoded == "{\"a\":1,\"b\":2}"
+    end
+
+    test "map 1 with mixed keys" do
+      encoded = Jcs.encode(%{:b => 2, "a" => 1})
+      assert encoded == "{\"a\":1,\"b\":2}"
+    end
+
+    test "map 2 with mixed keys" do
+      encoded =
+        Jcs.encode(%{
+          :aa => 200,
+          "b" => 100.0,
+          "西葛西駅" => [200, "station"],
+          :a => "hello\tworld!"
+        })
+
+      assert encoded ==
+               "{\"a\":\"hello\\tworld!\",\"aa\":200,\"b\":100,\"西葛西駅\":[200,\"station\"]}"
     end
   end
 end
