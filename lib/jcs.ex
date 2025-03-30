@@ -10,7 +10,6 @@ defmodule Jcs do
 
   import Bitwise
 
-  @escape_ascii ~r/([\\"]|[^\\ -~])/
   @specials %{
     0x08 => "\\b",
     0x09 => "\\t",
@@ -65,16 +64,11 @@ defmodule Jcs do
         cp == 0x5C ->
           "\\\\"
 
-        cp < 0x20 || (cp >= 0x80 && cp < 0xA1) ->
-          case Map.get(@specials, cp) do
-            nil ->
-              "\\u" <> hex4(cp)
-
-            special ->
-              special
-          end
+        cp < 0x20 || (cp > 0x7F && cp <= 0xA0) ->
+          Map.get_lazy(@specials, cp, fn -> escape_unicode(cp) end)
 
         true ->
+          # "as is"
           to_string([cp])
       end
     end)
@@ -96,61 +90,65 @@ defmodule Jcs do
   If the Unicode value is outside of the ASCII control character range, it
   MUST be serialized "as is" unless it is equivalent to U+005C (\) or
   U+0022 ("), which MUST be serialized as "\\" and "\"", respectively.
-
-  Implementation note: For Elixir, we assume that "as is" means that
-  single-byte codepoints for non-printing characters in the range
-  U+0080 to U+00A0 should also be serialized in the lowercase
-  hexadecimal Unicode notation ("\\uhhhh"). Without this special
-  serialization, Elixir will serialize these characters with an
-  8-bit notation: "\\xhh".
   """
   def encode_basestring_ascii(s) do
-    String.codepoints(s)
+    String.to_charlist(s)
     |> Enum.map(fn cp ->
-      if !Regex.match?(@escape_ascii, cp) do
-        cp
-      else
-        encode_utf16(cp)
+      cond do
+        cp == 0x22 ->
+          "\\\""
+
+        cp == 0x5C ->
+          "\\\\"
+
+        # \u encode anything other than the basic ascii set
+        cp < 0x20 || cp > 0x7E ->
+          Map.get_lazy(@specials, cp, fn -> escape_unicode(cp) end)
+
+        true ->
+          # Basic ascii left "as is"
+          to_string([cp])
       end
     end)
     |> Enum.join("")
   end
 
   @doc """
-  Given either a single codepoint (unicode character), or its
-  integer value, returns a single string concatenating one or
-  two "\\uxxxx" elements, each representing a UTF-16 encoded value.
+  Given either a String, or single codepoint, returns a string
+  concatenating  "\\uxxxx" elements.
   """
-  def encode_utf16(cp) when is_binary(cp) do
-    cp
-    |> String.to_charlist()
-    |> hd()
-    |> encode_utf16()
+  def escape_unicode(n) when is_integer(n) do
+    if n < 0x10000 do
+      if n >= 0xD800 && n <= 0xDFFF do
+        raise ArgumentError, "Invalid codepoint #{hex4(n)}"
+      end
+
+      # Single 16-bit value
+      "\\u" <> hex4(n)
+    else
+      if n > 0x10FFFF do
+        raise ArgumentError, "Invalid codepoint #{hex4(n)}"
+      end
+
+      # 17 or more bits
+      "\\u{" <> hex4(n) <> "}"
+    end
   end
 
-  def encode_utf16(n) when is_integer(n) do
-    n
-    |> to_utf16()
-    |> Enum.map_join("", fn val -> "\\u" <> hex4(val) end)
+  def escape_unicode(s) when is_binary(s) do
+    String.to_charlist(s) |> escape_unicode()
+  end
+
+  def escape_unicode(codepoints) when is_list(codepoints) do
+    Enum.map_join(codepoints, "", &escape_unicode/1)
   end
 
   @doc """
-  Given either a list of codepoints, a single codepoint (unicode character),
-  or its integer value, returns a flattened list of UTF-16 encoded
-  values. This list can be used to sort object property keys as
-  specified in the RFC.
+  Given either a binary, a list of codepoints,
+  a single codepoint (unicode character) or its integer value,
+  returns a flattened list of UTF-16 encoded values. This list
+  can be used to sort object property keys as specified in the RFC.
   """
-  def to_utf16(codepoints) when is_list(codepoints) do
-    Enum.flat_map(codepoints, &to_utf16/1)
-  end
-
-  def to_utf16(cp) when is_binary(cp) do
-    cp
-    |> String.to_charlist()
-    |> hd()
-    |> to_utf16()
-  end
-
   def to_utf16(n) when is_integer(n) do
     if n < 0x10000 do
       if n >= 0xD800 && n <= 0xDFFF do
@@ -165,11 +163,19 @@ defmodule Jcs do
       end
 
       # Two 16-bit values
-      n = n - 0x10000
-      s1 = 0xD800 ||| (n >>> 10 &&& 0x3FF)
-      s2 = 0xDC00 ||| (n &&& 0x3FF)
+      n1 = n - 0x10000
+      s1 = 0xD800 ||| (n1 >>> 10 &&& 0x3FF)
+      s2 = 0xDC00 ||| (n1 &&& 0x3FF)
       [s1, s2]
     end
+  end
+
+  def to_utf16(s) when is_binary(s) do
+    String.to_charlist(s) |> to_utf16()
+  end
+
+  def to_utf16(codepoints) when is_list(codepoints) do
+    Enum.flat_map(codepoints, &to_utf16/1)
   end
 
   defp hex4(n) do
@@ -251,6 +257,13 @@ defmodule Jcs do
       _ ->
         raise ArgumentError, "bad key #{inspect(bad_key)}"
     end
+  end
+
+  defp sort_properties({k1, _v1}, {k2, _v2}) when is_binary(k1) and is_binary(k2) do
+    # Sort object properties by key name as UTF-16 encoded.
+    utf1 = to_utf16(k1)
+    utf2 = to_utf16(k2)
+    utf1 <= utf2
   end
 
   # OTP-independent number serialization.
@@ -381,12 +394,5 @@ defmodule Jcs do
       # Change "<NUMBER>.0" to "<NUMBER>" (integer)
       String.replace_trailing(s, ".0", "")
     end
-  end
-
-  defp sort_properties({k1, _v1}, {k2, _v2}) do
-    # Sort object properties by key name as UTF-16 encoded.
-    utf1 = String.codepoints(k1) |> to_utf16()
-    utf2 = String.codepoints(k2) |> to_utf16()
-    utf1 <= utf2
   end
 end

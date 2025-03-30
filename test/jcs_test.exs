@@ -6,88 +6,137 @@ defmodule JcsTest do
     assert :erlang.float_to_binary(1.0e+30, [:short]) == "1.0e30"
   end
 
-  test "UTF-16 for face with tears of joy U+1F602" do
-    input = "😂"
+  describe "sorting with UTF-16" do
+    test "G-clef U+1D11E" do
+      input = "𝄞"
+      encoded = Jcs.to_utf16(input)
+      assert encoded == [0xD834, 0xDD1E]
+    end
 
-    utf16 =
-      String.codepoints(input)
-      |> hd()
-      |> String.to_charlist()
-      |> hd()
-      |> Jcs.encode_utf16()
+    test "Face with tears of joy U+1F602" do
+      input = "😂"
+      encoded = Jcs.to_utf16(input)
+      assert encoded == [0xD83D, 0xDE02]
+    end
 
-    assert utf16 == "\\ud83d\\ude02"
+    test "Hebrew letter dalet With dagesh U+FB33" do
+      input = "דּ"
+      encoded = Jcs.to_utf16(input)
+      assert encoded == [0xFB33]
+    end
+
+    test "sorting three characters" do
+      input = ["דּ", "😂", "𝄞"]
+
+      output =
+        Enum.sort(input, fn k1, k2 ->
+          utf1 = Jcs.to_utf16(k1)
+          utf2 = Jcs.to_utf16(k2)
+          utf1 <= utf2
+        end)
+
+      assert output == ["𝄞", "😂", "דּ"]
+    end
   end
 
-  test "UTF-16 for Hebrew letter dalet With dagesh U+FB33" do
-    input = "דּ"
+  describe "escaping unicode" do
+    test "G-clef U+1D11E" do
+      input = "𝄞"
+      escaped = Jcs.escape_unicode(input)
+      assert escaped == "\\u{1d11e}"
+    end
 
-    utf16 =
-      String.codepoints(input)
-      |> hd()
-      |> String.to_charlist()
-      |> hd()
-      |> Jcs.encode_utf16()
+    test "Face with tears of joy U+1F602" do
+      input = "😂"
+      escaped = Jcs.escape_unicode(input)
+      assert escaped == "\\u{1f602}"
+    end
 
-    assert utf16 == "\\ufb33"
+    test "Hebrew letter dalet With dagesh U+FB33" do
+      input = "דּ"
+      escaped = Jcs.escape_unicode(input)
+      assert escaped == "\\ufb33"
+    end
   end
 
-  test "some chars" do
-    encoded = Jcs.encode_basestring("hello\tworld!")
-    assert encoded == "hello\\tworld!"
+  describe "low level string encoding" do
+    test "some chars" do
+      input = "hello\tworld!"
+      encoded = Jcs.encode_basestring_ascii(input)
+      assert encoded == "hello\\tworld!"
+      assert input == Macro.unescape_string(encoded)
+    end
+
+    test "some ascii-only chars" do
+      input = "Alliance Française!"
+      encoded = Jcs.encode_basestring_ascii(input)
+      assert encoded == "Alliance Fran\\u00e7aise!"
+      assert input == Macro.unescape_string(encoded)
+    end
+
+    test "some unicode chars" do
+      input = "西葛西駅"
+      encoded = Jcs.encode_basestring_ascii(input)
+      assert encoded == "\\u897f\\u845b\\u897f\\u99c5"
+      assert input == Macro.unescape_string(encoded)
+    end
   end
 
-  test "some ascii-only chars" do
-    encoded = Jcs.encode_basestring_ascii("Alliance Française!")
-    assert encoded == "Alliance Fran\\u00e7aise!"
-  end
+  describe "JCS encoding" do
+    test "integer" do
+      encoded = Jcs.encode(100)
+      assert encoded == "100"
+    end
 
-  test "some unicode chars" do
-    encoded = Jcs.encode_basestring_ascii("西葛西駅")
-    assert encoded == "\\u897f\\u845b\\u897f\\u99c5"
-  end
+    test "float" do
+      encoded = Jcs.encode(0.1)
+      assert encoded == "0.1"
+    end
 
-  test "encode integer" do
-    encoded = Jcs.encode(100)
-    assert encoded == "100"
-  end
+    test "string" do
+      encoded = Jcs.encode("hello\tworld!")
+      assert encoded == "\"hello\\tworld!\""
+    end
 
-  test "encode float" do
-    encoded = Jcs.encode(0.1)
-    assert encoded == "0.1"
-  end
+    test "unicode string" do
+      encoded = Jcs.encode("西葛西駅")
+      assert encoded == "\"西葛西駅\""
+    end
 
-  test "encode string" do
-    encoded = Jcs.encode("hello\tworld!")
-    assert encoded == "\"hello\\tworld!\""
-  end
+    test "list" do
+      encoded = Jcs.encode([100, "hello\tworld!"])
+      assert encoded == "[100,\"hello\\tworld!\"]"
+    end
 
-  test "encode unicode string" do
-    encoded = Jcs.encode("西葛西駅")
-    assert encoded == "\"西葛西駅\""
-  end
+    test "map" do
+      encoded =
+        Jcs.encode(%{
+          "aa" => 200,
+          "b" => 100.0,
+          "西葛西駅" => [200, "station"],
+          "a" => "hello\tworld!"
+        })
 
-  test "encode list" do
-    encoded = Jcs.encode([100, "hello\tworld!"])
-    assert encoded == "[100,\"hello\\tworld!\"]"
-  end
+      assert encoded ==
+               "{\"a\":\"hello\\tworld!\",\"aa\":200,\"b\":100,\"西葛西駅\":[200,\"station\"]}"
 
-  test "encode map" do
-    encoded =
-      Jcs.encode(%{"aa" => 200, "b" => 100.0, "西葛西駅" => [200, "station"], "a" => "hello\tworld!"})
+      decoded = Jason.decode!(encoded)
+      assert Jcs.encode(decoded) == encoded
+    end
 
-    assert encoded == "{\"a\":\"hello\\tworld!\",\"aa\":200,\"b\":100,\"西葛西駅\":[200,\"station\"]}"
-    decoded = Jason.decode!(encoded)
-    assert Jcs.encode(decoded) == encoded
-  end
+    test "equivalent maps" do
+      encoded_1 =
+        Jcs.encode(%{
+          "西葛西駅" => [200, "station"],
+          "b" => 100.0,
+          "aa" => 200,
+          "a" => "hello\tworld!"
+        })
 
-  test "equivalent maps" do
-    encoded_1 =
-      Jcs.encode(%{"西葛西駅" => [200, "station"], "b" => 100.0, "aa" => 200, "a" => "hello\tworld!"})
+      encoded_2 =
+        Jcs.encode(%{"aa" => 200, "b" => 100, "西葛西駅" => [200, "station"], "a" => "hello\tworld!"})
 
-    encoded_2 =
-      Jcs.encode(%{"aa" => 200, "b" => 100, "西葛西駅" => [200, "station"], "a" => "hello\tworld!"})
-
-    assert encoded_1 == encoded_2
+      assert encoded_1 == encoded_2
+    end
   end
 end

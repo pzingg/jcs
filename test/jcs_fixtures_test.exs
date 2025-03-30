@@ -8,12 +8,28 @@ defmodule JcsFixturesTest do
     input_path = "#{@input_dir}/#{file_name}"
     output_path = "#{@output_dir}/#{file_name}"
 
-    {:ok, input} = File.read(input_path)
+    {:ok, f} = File.open(input_path, [:read, :utf8])
+    input = IO.read(f, :eof)
+    File.close(f)
     {:ok, input} = Jason.decode(input)
-    encoded = Jcs.encode(input)
 
-    {:ok, expected} = File.read(output_path)
-    assert encoded == expected
+    encoded = Jcs.encode(input)
+    encoded_bytes = :binary.bin_to_list(encoded)
+
+    {:ok, f} = File.open(output_path, [:read, :utf8])
+    expected = IO.read(f, :eof)
+    File.close(f)
+    expected_bytes = :binary.bin_to_list(expected)
+
+    if encoded != expected do
+      write_bytes("#{file_name}-encoded.json", encoded_bytes)
+      write_bytes("#{file_name}-expected.json", expected_bytes)
+      assert false, "#{encoded} does not match expected #{expected}"
+    end
+  end
+
+  def write_bytes(path, bytes) do
+    File.write(path, bytes)
   end
 
   describe "tests from cyberphone/json-canonicalization" do

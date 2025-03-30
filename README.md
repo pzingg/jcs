@@ -21,6 +21,8 @@ Pull requests are gratefully encouraged!
 
 Code is based on the [Python 3 jcs package](https://github.com/titusz/jcs).
 
+Other language implementations are listed [here](https://github.com/cyberphone/json-canonicalization).
+
 Test suites are from:
   * [JSON-LD 1.1 Processing Algorithms and API - Test Suite](https://w3c.github.io/json-ld-api/tests/)
   * [cyberphone/json-canonicalization - On-line Browser Test](https://cyberphone.github.io/doc/security/browser-json-canonicalization.html)
