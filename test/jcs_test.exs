@@ -39,7 +39,7 @@ defmodule JcsTest do
     end
   end
 
-  describe "escaping unicode" do
+  describe "escaping Unicode" do
     test "G-clef U+1D11E" do
       input = "𝄞"
       escaped = Jcs.escape_unicode(input)
@@ -59,22 +59,29 @@ defmodule JcsTest do
     end
   end
 
-  describe "low level string encoding" do
-    test "some chars" do
-      input = "hello\tworld!"
+  describe "low level string encoding, constrained to ASCII" do
+    test "U+0009 (TAB) character" do
+      input = <<"hello", 0x09::utf8, "world!">>
       encoded = Jcs.encode_basestring_ascii(input)
       assert encoded == "hello\\tworld!"
       assert input == Macro.unescape_string(encoded)
     end
 
-    test "some ascii-only chars" do
+    test "U+000B character" do
+      input = <<"hello", 0x0B::utf8, "world!">>
+      encoded = Jcs.encode_basestring_ascii(input)
+      assert encoded == "hello\\u000bworld!"
+      assert input == Macro.unescape_string(encoded)
+    end
+
+    test "some ascii-only characters" do
       input = "Alliance Française!"
       encoded = Jcs.encode_basestring_ascii(input)
       assert encoded == "Alliance Fran\\u00e7aise!"
       assert input == Macro.unescape_string(encoded)
     end
 
-    test "some unicode chars" do
+    test "some Unicode characters" do
       input = "西葛西駅"
       encoded = Jcs.encode_basestring_ascii(input)
       assert encoded == "\\u897f\\u845b\\u897f\\u99c5"
@@ -93,14 +100,21 @@ defmodule JcsTest do
       assert encoded == "0.1"
     end
 
-    test "string" do
+    test "string with ASCII control character" do
       encoded = Jcs.encode("hello\tworld!")
       assert encoded == "\"hello\\tworld!\""
+      assert Jason.decode!(encoded) == "hello\tworld!"
     end
 
-    test "unicode string" do
+    test "unicode string - as is" do
       encoded = Jcs.encode("西葛西駅")
       assert encoded == "\"西葛西駅\""
+    end
+
+    test "string \\u0080 - as is" do
+      encoded = Jcs.encode("\u0080")
+      assert String.to_charlist(encoded) == [?", 0x80, ?"]
+      assert :binary.bin_to_list(encoded) == [?", 0xC2, 0x80, ?"]
     end
 
     test "list" do

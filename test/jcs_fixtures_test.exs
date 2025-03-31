@@ -6,26 +6,15 @@ defmodule JcsFixturesTest do
 
   def fixture_test(file_name) do
     input_path = "#{@input_dir}/#{file_name}"
+    encoded = File.read!(input_path) |> Jason.decode!() |> Jcs.encode()
+
     output_path = "#{@output_dir}/#{file_name}"
+    expected = File.read!(output_path)
+    assert encoded == expected
 
-    {:ok, f} = File.open(input_path, [:read, :utf8])
-    input = IO.read(f, :eof)
-    File.close(f)
-    {:ok, input} = Jason.decode(input)
-
-    encoded = Jcs.encode(input)
     encoded_bytes = :binary.bin_to_list(encoded)
-
-    {:ok, f} = File.open(output_path, [:read, :utf8])
-    expected = IO.read(f, :eof)
-    File.close(f)
     expected_bytes = :binary.bin_to_list(expected)
-
-    if encoded != expected do
-      write_bytes("#{file_name}-encoded.json", encoded_bytes)
-      write_bytes("#{file_name}-expected.json", expected_bytes)
-      assert false, "#{encoded} does not match expected #{expected}"
-    end
+    assert encoded_bytes == expected_bytes
   end
 
   def write_bytes(path, bytes) do
@@ -37,19 +26,16 @@ defmodule JcsFixturesTest do
       fixture_test("arrays.json")
     end
 
-    @tag :skip
     # same as tjs09.json
     test "french.json" do
       fixture_test("french.json")
     end
 
-    @tag :skip
     # same as tjs10.json
     test "structures.json" do
       fixture_test("structures.json")
     end
 
-    @tag :skip
     # same as tjs12.json
     test "values.json" do
       fixture_test("values.json")
@@ -77,14 +63,12 @@ defmodule JcsFixturesTest do
       fixture_test("tjs12.json")
     end
 
-    test "tjs13 transforming JSON literal with wierd canonicalization" do
+    test "tjs13 transforming JSON literal with weird canonicalization" do
       fixture_test("tjs13.json")
     end
   end
 
-  describe "encoding as-is" do
-    test "Latin-1 Supplement" do
-      fixture_test("latin1.json")
-    end
+  test "encoding ASCII non-control values as-is" do
+    fixture_test("latin1.json")
   end
 end

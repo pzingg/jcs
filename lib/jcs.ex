@@ -51,15 +51,18 @@ defmodule Jcs do
 
   @doc """
   Returns a JSON representation of a string, escaping characters
-  U+005C ("\\"), U+0022 ("\""), and values between 0x00 and 0x1F per
-  RFC 8785.
+  per RFC 8785:
 
-  Non-printing ASCII characters with values 0x80 to 0x9F are
-  serialized in lowercase hexadecimal Unicode notation ("\\uhhhh").
+  If the Unicode value falls within the traditional ASCII control character
+  range (U+0000 through U+001F), it MUST be serialized using lowercase
+  4-digit hexadecimal Unicode notation ("\\uhhhh") unless it is in
+  the set of predefined JSON control characters U+0008, U+0009, U+000A,
+  U+000C, or U+000D, which MUST be serialized as "\b", "\t", "\n", "\f",
+  and "\r", respectively.
 
-  ASCII characters with values between 0x20 and 0x7F, and
-  all characters with unicode values 0xA0 through 0x10FFFF are
-  not escaped.
+  If the Unicode value is outside of the ASCII control character range, it
+  MUST be serialized "as is" unless it is equivalent to U+005C (\) or
+  U+0022 ("), which MUST be serialized as "\\" and "\"", respectively.
   """
   def encode_basestring(s) do
     String.to_charlist(s)
@@ -71,7 +74,7 @@ defmodule Jcs do
         cp == 0x5C ->
           "\\\\"
 
-        cp < 0x20 || (cp > 0x7F && cp <= 0xA0) ->
+        cp < 0x20 ->
           Map.get_lazy(@specials, cp, fn -> escape_unicode(cp) end)
 
         true ->
@@ -83,21 +86,13 @@ defmodule Jcs do
   end
 
   @doc """
-  Returns an ASCII-only JSON representation of a string, escaping characters
-  between ASCII values 0x00 and 0x1F per RFC 8785. Characters with
-  values above 0x7E are encoded as "\\uhhhh" or "\\u{hhhhh}"
-  strings.
+  Returns a JSON representation of a string, escaping characters
+  in the range U+0000 through U+007E per RFC 8785. Values above
+  U+0073 are serialized using lowercase hexadecimal Unicode notation
+  ("\\uhhhh" or "\\u{hhhhh}")
 
-  If the Unicode value falls within the traditional ASCII control character
-  range (U+0000 through U+001F), it MUST be serialized using lowercase
-  hexadecimal Unicode notation ("\\uhhhh" or "\\u{hhhhh}") unless it is in
-  the set of predefined JSON control characters U+0008, U+0009, U+000A,
-  U+000C, or U+000D, which MUST be serialized as "\b", "\t", "\n", "\f",
-  and "\r", respectively.
-
-  If the Unicode value is outside of the ASCII control character range, it
-  MUST be serialized "as is" unless it is equivalent to U+005C (\) or
-  U+0022 ("), which MUST be serialized as "\\" and "\"", respectively.
+  See `encode_basestring/1` for details of the encoding of values
+  U+005C (\), U+0022 (") and U+0000 through U+001F.
   """
   def encode_basestring_ascii(s) do
     String.to_charlist(s)
