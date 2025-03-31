@@ -257,9 +257,11 @@ defmodule Jcs do
 
   defp stringify_name({name, _v} = elem) when is_binary(name), do: elem
 
-  defp stringify_name({name, value}) when is_atom(name) and not is_nil(name) do
+  defp stringify_name({name, value}) when is_atom(name), do: {Atom.to_string(name), value}
+
+  defp stringify_name({name, value}) do
     try do
-      {to_string(name), value}
+      {String.Chars.to_string(name), value}
     rescue
       _ ->
         raise ArgumentError, "Invalid JSON object name #{inspect(name)}"

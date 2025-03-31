@@ -143,28 +143,28 @@ defmodule JcsTest do
 
       assert encoded_1 == encoded_2
     end
+  end
 
-    test "map with atom keys" do
+  describe "object name coercion" do
+    test "atom" do
       encoded = Jcs.encode(%{b: 2, a: 1})
       assert encoded == "{\"a\":1,\"b\":2}"
     end
 
-    test "map 1 with mixed keys" do
-      encoded = Jcs.encode(%{:b => 2, "a" => 1})
-      assert encoded == "{\"a\":1,\"b\":2}"
+    test "nil" do
+      encoded = Jcs.encode(%{nil => 2, "a" => 1})
+      assert encoded == "{\"a\":1,\"nil\":2}"
     end
 
-    test "map 2 with mixed keys" do
-      encoded =
-        Jcs.encode(%{
-          :aa => 200,
-          "b" => 100.0,
-          "西葛西駅" => [200, "station"],
-          :a => "hello\tworld!"
-        })
+    test "integer" do
+      encoded = Jcs.encode(%{1 => 2, "a" => 1})
+      assert encoded == "{\"1\":2,\"a\":1}"
+    end
 
-      assert encoded ==
-               "{\"a\":\"hello\\tworld!\",\"aa\":200,\"b\":100,\"西葛西駅\":[200,\"station\"]}"
+    test "map" do
+      assert_raise(ArgumentError, "Invalid JSON object name %{\"hello\" => \"world\"}", fn ->
+        Jcs.encode(%{%{"hello" => "world"} => 2, "a" => 1})
+      end)
     end
   end
 end
